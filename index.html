@@ -7,61 +7,147 @@
 <title>AI Studio Video</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;background:#090b14;color:#fff;font-family:Arial,sans-serif}
+body{margin:0;background:#090b14;color:white;font-family:Arial,sans-serif}
 header{padding:20px 6%;border-bottom:1px solid #25283b}
-.logo{font-size:25px;font-weight:bold;color:#a78bfa}
-main{max-width:850px;margin:55px auto;padding:20px}
-h1{text-align:center;font-size:38px}
-.sub{text-align:center;color:#a5a5b5}
-.panel{background:#151827;padding:24px;border:1px solid #30344b;border-radius:18px;margin-top:35px}
+.logo{font-size:24px;font-weight:bold;color:#a78bfa}
+main{max-width:750px;margin:35px auto;padding:20px}
+h1{text-align:center;font-size:34px}
+.sub{text-align:center;color:#aaa}
+.panel{background:#151827;padding:24px;border:1px solid #30344b;border-radius:18px;margin-top:30px}
 label{display:block;margin:15px 0 8px}
-textarea,select{width:100%;padding:15px;border-radius:10px;background:#0d1020;color:white;border:1px solid #383c55;font-size:16px}
-textarea{height:130px;resize:vertical}
-.options{display:grid;grid-template-columns:1fr 1fr;gap:15px}
-button{width:100%;padding:16px;margin-top:22px;background:linear-gradient(90deg,#7657ed,#a855f7);border:0;border-radius:10px;color:white;font-weight:bold;font-size:17px}
+input,textarea,select{width:100%;padding:14px;border-radius:9px;background:#0d1020;color:white;border:1px solid #383c55;font-size:15px}
+textarea{height:120px}
+button{width:100%;padding:16px;margin-top:18px;background:#8057ed;border:0;border-radius:10px;color:white;font-size:17px;font-weight:bold}
 button:disabled{opacity:.5}
-#status{color:#c4b5fd;text-align:center;margin-top:20px}
-#preview{width:100%;margin-top:20px;border-radius:12px}
-footer{text-align:center;color:#888;padding:30px}
+#status{color:#c4b5fd;text-align:center;overflow-wrap:anywhere}
+video{width:100%;margin-top:20px;border-radius:12px}
+small{color:#999}
 </style>
 </head>
 <body>
 <header><div class="logo">✦ AI STUDIO VIDEO</div></header>
 <main>
 <h1>Turn Your Imagination Into Video</h1>
-<p class="sub">Create cinematic AI videos from simple text prompts.</p>
+<p class="sub">Create cinematic AI videos with Wan 2.1</p>
+
 <div class="panel">
-<label>Describe your video</label>
-<textarea id="prompt" placeholder="A cinematic drone shot of a futuristic city at sunset..."></textarea>
-<div class="options">
-<div>
+<label>Backend API URL</label>
+<input id="api" value="https://underfoot-collar-mulch.ngrok-free.dev">
+
+<label>Private API Key</label>
+<input id="key" type="password" placeholder="Paste your private API key">
+
+<label>Describe Your Video</label>
+<textarea id="prompt" placeholder="A cinematic realistic scene of a horse running through a forest..."></textarea>
+
 <label>Aspect Ratio</label>
 <select id="ratio">
 <option value="16:9">Landscape 16:9</option>
 <option value="9:16">Portrait 9:16</option>
 </select>
-</div>
-<div>
-<label>Quality</label>
-<select id="quality">
-<option value="480p">480p</option>
-</select>
-</div>
-</div>
+
+<small>Current generation length: approximately 2 seconds.</small>
+
 <button id="generate" onclick="generateVideo()">Generate Video ✨</button>
 <p id="status">Ready to create your video.</p>
 <video id="preview" controls hidden></video>
+<a id="download" hidden download="AI_Studio_Video.mp4">Download Video</a>
 </div>
 </main>
-<footer>AI STUDIO VIDEO · Powered by AI</footer>
+
 <script>
+function getSettings(){
+ const api=document.getElementById("api").value.trim().replace(/\/+$/,"");
+ const key=document.getElementById("key").value.trim();
+ if(!api || !key) throw new Error("Enter API URL and private API key.");
+ return {api,key};
+}
+
 async function generateVideo(){
- const prompt=document.getElementById('prompt').value.trim();
- const status=document.getElementById('status');
- if(!prompt){status.textContent="Please enter a video prompt.";return;}
- status.textContent="Video engine is not connected yet. Backend setup is coming next.";
+ const btn=document.getElementById("generate");
+ const status=document.getElementById("status");
+ const preview=document.getElementById("preview");
+ const download=document.getElementById("download");
+
+ btn.disabled=true;
+ preview.hidden=true;
+ download.hidden=true;
+
+ try{
+  const {api,key}=getSettings();
+  const prompt=document.getElementById("prompt").value.trim();
+  const ratio=document.getElementById("ratio").value;
+
+  if(!prompt) throw new Error("Please enter a video prompt.");
+
+  const headers={
+   "Content-Type":"application/json",
+   "x-api-key":key,
+   "ngrok-skip-browser-warning":"true"
+  };
+
+  status.textContent="Sending request to Wan 2.1...";
+
+  const response=await fetch(api+"/generate",{
+   method:"POST",
+   headers,
+   body:JSON.stringify({prompt,ratio})
+  });
+
+  const data=await response.json();
+  if(!response.ok) throw new Error(data.detail || "Generation request failed.");
+
+  const job=data.job_id;
+  status.textContent="Video is generating. Please wait...";
+
+  while(true){
+   await new Promise(resolve=>setTimeout(resolve,5000));
+
+   const check=await fetch(api+"/status/"+job,{headers:{
+    "x-api-key":key,
+    "ngrok-skip-browser-warning":"true"
+   }});
+
+   const state=await check.json();
+   if(!check.ok) throw new Error(state.detail || "Status check failed.");
+
+   if(state.status==="failed") throw new Error(state.error || "Generation failed.");
+
+   if(state.status==="completed") break;
+
+   status.textContent="Wan 2.1 is creating your video... Status: "+state.status;
+  }
+
+  status.textContent="Preparing your video...";
+
+  const videoResponse=await fetch(api+"/video/"+job,{headers:{
+   "x-api-key":key,
+   "ngrok-skip-browser-warning":"true"
+  }});
+
+  if(!videoResponse.ok) throw new Error("Video download failed.");
+
+  const blob=await videoResponse.blob();
+  const videoURL=URL.createObjectURL(blob);
+
+  preview.src=videoURL;
+  preview.hidden=false;
+
+  download.href=videoURL;
+  download.hidden=false;
+  download.style.display="block";
+  download.style.marginTop="15px";
+  download.style.color="#c4b5fd";
+  download.textContent="Download Your Video";
+
+  status.textContent="Your AI video is ready!";
+
+ }catch(error){
+  status.textContent="Error: "+error.message;
+ }finally{
+  btn.disabled=false;
+ }
 }
 </script>
 </body>
 </html>
-
